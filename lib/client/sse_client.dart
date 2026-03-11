@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:collection';
 import 'dart:convert';
 import 'dart:developer';
 import 'package:http/http.dart' as http;
@@ -23,13 +24,19 @@ class SSEClient extends ISSEClient {
   }
 
   @override
-  Stream<SSEResponse> connect(String connectionId, SSERequest request,
-      {Function(dynamic)? fromJson}) {
+  Stream<SSEResponse> connect(
+    String connectionId,
+    SSERequest request, {
+    Function(dynamic)? fromJson,
+  }) {
     return subscribeToSSE(connectionId, request, fromJson: fromJson);
   }
 
-  Stream<SSEResponse> subscribeToSSE(String connectionId, SSERequest request,
-      {Function(dynamic)? fromJson}) {
+  Stream<SSEResponse> subscribeToSSE(
+    String connectionId,
+    SSERequest request, {
+    Function(dynamic)? fromJson,
+  }) {
     if (_connections.containsKey(connectionId)) {
       return _connections[connectionId]!.stream;
     }
@@ -50,14 +57,19 @@ class _SSEConnection {
   static const int _maxRetries = 5;
   static const Duration _initialDelay = Duration(seconds: 2);
 
+  final Queue<SSEResponse> _responseQueue = Queue();
+  Timer? _rateLimitTimer;
+
   _SSEConnection(this.request, this.fromJson) {
     _connect();
   }
 
   void _connect() {
     _client = http.Client();
-    var httpRequest =
-        http.Request(request.requestType.value, request.getRequestUri);
+    var httpRequest = http.Request(
+      request.requestType.value,
+      request.getRequestUri,
+    );
 
     if (request.headers != null) {
       httpRequest.headers.addAll(request.headers!);
@@ -66,47 +78,51 @@ class _SSEConnection {
       httpRequest.body = json.encode(request.body);
     }
 
-    _client!.send(httpRequest).then((response) {
-      if (response.statusCode >= 500) {
-        _handleError(
-            "Failed to connect to server. Status code: ${response.statusCode}");
-        return;
-      }
-
-      _retryCount = 0;
-
-      final StringBuffer buffer = StringBuffer();
-
-      response.stream
-          .transform(utf8.decoder)
-          .transform(const LineSplitter())
-          .listen(
-        (String line) {
-          if (_controller.isClosed) return;
-
-          if (line.isEmpty) {
-            // Parse accumulated event when an empty line is encountered
-            if (buffer.isNotEmpty) {
-              final sseRes = SSEResponse.parse(buffer.toString());
-              _controller.add(sseRes);
-              request.onData(sseRes);
-              buffer.clear();
-            }
-          } else {
-            buffer.writeln(line);
+    _client!
+        .send(httpRequest)
+        .then((response) {
+          if (response.statusCode >= 500) {
+            _handleError(
+              "Failed to connect to server. Status code: ${response.statusCode}",
+            );
+            return;
           }
-        },
-        onDone: () {
-          request.onDone?.call();
-        },
-        onError: (error) {
+
+          _retryCount = 0;
+
+          final StringBuffer buffer = StringBuffer();
+
+          response.stream
+              .transform(utf8.decoder)
+              .transform(const LineSplitter())
+              .listen(
+                (String line) {
+                  if (_controller.isClosed) return;
+
+                  if (line.isEmpty) {
+                    // Parse accumulated event when an empty line is encountered
+                    if (buffer.isNotEmpty) {
+                      final sseRes = SSEResponse.parse(buffer.toString());
+                      _controller.add(sseRes);
+                      _enqueueResponse(sseRes);
+                      buffer.clear();
+                    }
+                  } else {
+                    buffer.writeln(line);
+                  }
+                },
+                onDone: () {
+                  request.onDone?.call();
+                },
+                onError: (error) {
+                  _handleError(error);
+                },
+                cancelOnError: true,
+              );
+        })
+        .catchError((error) {
           _handleError(error);
-        },
-        cancelOnError: true,
-      );
-    }).catchError((error) {
-      _handleError(error);
-    });
+        });
   }
 
   void _handleError(dynamic error) {
@@ -138,9 +154,43 @@ class _SSEConnection {
     });
   }
 
+  void _enqueueResponse(SSEResponse response) {
+    _responseQueue.add(response);
+
+    if (!request.enableRateLimit) {
+      request.onData(response);
+      return;
+    }
+
+    if (_rateLimitTimer == null) {
+      _startRateLimitTimer();
+    }
+  }
+
+  void _startRateLimitTimer() {
+    _rateLimitTimer = Timer.periodic(
+      Duration(milliseconds: request.rateLimitMs),
+      (_) => _flushResponse(),
+    );
+  }
+
+  void _flushResponse() {
+    if (_responseQueue.isEmpty) {
+      _rateLimitTimer?.cancel();
+      _rateLimitTimer = null;
+      return;
+    }
+
+    final response = _responseQueue.removeFirst();
+    request.onData(response);
+  }
+
   Stream<SSEResponse> get stream => _controller.stream;
 
   void close() {
+    _rateLimitTimer?.cancel();
+    _rateLimitTimer = null;
+    _responseQueue.clear();
     if (_controller.isClosed) return;
     _controller.close();
     _client?.close();

@@ -8,27 +8,33 @@ class SSERequest extends BaseRequest {
   final dynamic _body;
   final RequestMethodType _requestType;
   final bool _retry;
+  final int _rateLimitMs;
+  final bool _enableRateLimit;
 
   final Function(SSEResponse) _onData;
   final Function(String)? _onError;
   final Function? _onDone;
 
-  SSERequest(
-      {required super.url,
-      super.contentType = RequestContentType.textEventStreamValue,
-      super.headers,
-      dynamic body,
-      RequestMethodType requestType = RequestMethodType.get,
-      bool retry = false,
-      required Function(SSEResponse) onData,
-      Function(String)? onError,
-      Function? onDone})
-      : _body = body,
-        _requestType = requestType,
-        _retry = retry,
-        _onData = onData,
-        _onError = onError,
-        _onDone = onDone;
+  SSERequest({
+    required super.url,
+    super.contentType = RequestContentType.textEventStreamValue,
+    super.headers,
+    dynamic body,
+    RequestMethodType requestType = RequestMethodType.get,
+    bool retry = false,
+    int rateLimitMs = 100,
+    bool enableRateLimit = false,
+    required Function(SSEResponse) onData,
+    Function(String)? onError,
+    Function? onDone,
+  }) : _body = body,
+       _requestType = requestType,
+       _retry = retry,
+       _rateLimitMs = rateLimitMs,
+       _enableRateLimit = enableRateLimit,
+       _onData = onData,
+       _onError = onError,
+       _onDone = onDone;
 
   RequestMethodType get requestType => _requestType;
 
@@ -41,4 +47,8 @@ class SSERequest extends BaseRequest {
   dynamic get body => _body;
 
   bool get retry => _retry;
+
+  int get rateLimitMs => _rateLimitMs;
+
+  bool get enableRateLimit => _enableRateLimit;
 }
