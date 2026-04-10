@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
 import 'dart:developer';
-import 'package:http/http.dart' as http;
+import '../adapter/i_http_adapter.dart';
 import '../model/sse_request.dart';
 import '../model/sse_response.dart';
 import 'i_sse_client.dart';
@@ -52,7 +52,7 @@ class _SSEConnection {
   final Function(dynamic p1)? fromJson;
   final StreamController<SSEResponse> _controller =
       StreamController.broadcast();
-  http.Client? _client;
+  IHttpAdapter? _adapter;
   int _retryCount = 0;
   static const int _maxRetries = 5;
   static const Duration _initialDelay = Duration(seconds: 2);
@@ -65,21 +65,24 @@ class _SSEConnection {
   }
 
   void _connect() {
-    _client = http.Client();
-    var httpRequest = http.Request(
-      request.requestType.value,
-      request.getRequestUri,
-    );
-
-    if (request.headers != null) {
-      httpRequest.headers.addAll(request.headers!);
-    }
-    if (request.body != null) {
-      httpRequest.body = json.encode(request.body);
+    final adapter = request.httpAdapter;
+    if (adapter == null) {
+      _handleError(
+        'No IHttpAdapter provided. '
+        'You must set httpAdapter on SSERequest or pass one to SSEClient.',
+      );
+      return;
     }
 
-    _client!
-        .send(httpRequest)
+    _adapter = adapter;
+
+    _adapter!
+        .sendStream(
+      method: request.requestType.value,
+      url: request.getRequestUri.toString(),
+      headers: request.headers ?? {},
+      body: request.body,
+    )
         .then((response) {
           if (response.statusCode >= 500) {
             _handleError(
@@ -193,6 +196,7 @@ class _SSEConnection {
     _responseQueue.clear();
     if (_controller.isClosed) return;
     _controller.close();
-    _client?.close();
+    _adapter?.close();
+    _adapter = null;
   }
 }

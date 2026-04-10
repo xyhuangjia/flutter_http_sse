@@ -1,0 +1,20 @@
+name: flutter_http_sse_example
+description: Example app demonstrating flutter_http_sse with pluggable HTTP adapters.
+publish_to: 'none'
+
+environment:
+  sdk: '>=2.17.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_http_sse:
+    path: ..
+  http: ^1.6.0
+  dio: ^5.4.0
+
+dev_dependencies:
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true

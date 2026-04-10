@@ -8,7 +8,8 @@ environment:
   sdk: '>=2.17.0 <4.0.0'
 
 dependencies:
-  http: ^1.6.0
+  # No HTTP dependency — users inject their own IHttpAdapter
+  # See example/ for HttpPackageAdapter and DioAdapter implementations
 
 dev_dependencies:
   flutter_test:

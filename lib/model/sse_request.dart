@@ -1,3 +1,4 @@
+import 'package:flutter_http_sse/adapter/i_http_adapter.dart';
 import 'package:flutter_http_sse/model/sse_response.dart';
 
 import '../enum/request_content_type_enum.dart';
@@ -10,6 +11,7 @@ class SSERequest extends BaseRequest {
   final bool _retry;
   final int _rateLimitMs;
   final bool _enableRateLimit;
+  final IHttpAdapter? _httpAdapter;
 
   final Function(SSEResponse) _onData;
   final Function(String)? _onError;
@@ -24,6 +26,7 @@ class SSERequest extends BaseRequest {
     bool retry = false,
     int rateLimitMs = 100,
     bool enableRateLimit = false,
+    IHttpAdapter? httpAdapter,
     required Function(SSEResponse) onData,
     Function(String)? onError,
     Function? onDone,
@@ -32,6 +35,7 @@ class SSERequest extends BaseRequest {
        _retry = retry,
        _rateLimitMs = rateLimitMs,
        _enableRateLimit = enableRateLimit,
+       _httpAdapter = httpAdapter,
        _onData = onData,
        _onError = onError,
        _onDone = onDone;
@@ -51,4 +55,7 @@ class SSERequest extends BaseRequest {
   int get rateLimitMs => _rateLimitMs;
 
   bool get enableRateLimit => _enableRateLimit;
+
+  /// The custom HTTP adapter to use. If null, the default [HttpPackageAdapter] is used.
+  IHttpAdapter? get httpAdapter => _httpAdapter;
 }
